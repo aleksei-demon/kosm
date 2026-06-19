@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Космос Комфорт</title>
+
+    <style>
+        :root {
+            --bg: #07111d;
+            --panel: #10253a;
+            --accent: #4ddcff;
+            --text: #e5f8ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Segoe UI, Arial, sans-serif;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        #starfield {
+            position: fixed;
+
+            inset: 0;
+
+            width: 100%;
+
+            height: 100%;
+
+            z-index: -1;
+
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 16px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--accent);
+        }
+
+        .card {
+            /* background: var(--panel); */
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns:
+                repeat(auto-fit, minmax(220px, 1fr));
+        }
+
+        label {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--accent);
+            background: #081726;
+            color: white;
+        }
+
+        .result {
+            line-height: 1.8;
+            font-size: 1.05rem;
+        }
+
+        .info {
+            opacity: .8;
+        }
+
+        details {
+            margin-top: 10px;
+        }
+
+        @media(max-width:700px) {
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="starfield"></canvas>
+    <div class="container">
+
+        <h1>🚀 Космос Комфорт</h1>
+
+        <div class="card">
+
+            <div class="grid">
+
+                <div>
+                    <label>Откуда</label>
+                    <select id="from"></select>
+                </div>
+
+                <div>
+                    <label>Куда</label>
+                    <select id="to"></select>
+                </div>
+
+                <div>
+                    <label>Лимит скорости (% c)</label>
+                    <input id="speedLimit" type="number" min="0" step="0.1" value="20">
+                </div>
+
+                <div>
+                    <label>Расстояние (ручной ввод)</label>
+                    <input id="customDistance" type="number" min="0" step="any">
+                </div>
+
+            </div>
+
+            <br>
+
+            <label>
+                <input type="checkbox" id="lightYears">
+                Использовать световые годы
+            </label>
+
+            <div class="info">
+                ℹ Используются средние расстояния между орбитами.
+            </div>
+
+            <details>
+
+                <summary>Расширенные настройки</summary>
+
+                <br>
+
+                <label>Ускорение (g)</label>
+
+                <input id="gForce" type="number" step="0.1" value="1">
+
+            </details>
+
+        </div>
+
+        <div class="card result" id="result">
+            Введите параметры полёта.
+        </div>
+        <div class="card">
+
+            <h3>График скорости</h3>
+
+            <canvas id="velocityCanvas" width="1000" height="300">
+            </canvas>
+
+        </div>
+
+        <div class="card">
+
+            <h3>График расстояния</h3>
+
+            <canvas id="distanceCanvas" width="1000" height="300">
+            </canvas>
+
+        </div>
+    </div>
+
+    <script>
+        "use strict";
+
+        /*
+        =================================================
+        Константы
+        =================================================
+        */
+
+        const C = 299792458;
+        const G = 9.80665;
+        const LIGHT_YEAR_KM = 9.4607e12;
+        const AU_KM = 149597870.7;
+        let speechTimer = null;
+
+        let madnessTimer = null;
+
+        let madnessMode = false;
+        /*
+        =================================================
+        Вспомогательные функции физики
+        =================================================
+        */
+
+        function lorentzFactor(beta) {
+
+            if (beta >= 1) {
+                beta = 0.999999999;
+            }
+
+            return 1 / Math.sqrt(
+                1 - beta * beta
+            );
+
+        }
+
+
+        /*
+        =================================================
+        Объекты
+        =================================================
+        */
+
+        const CELESTIAL_OBJECTS = {
+
+            "Меркурий": 0.39,
+            "Венера": 0.72,
+            "Земля": 1,
+            "Луна": 1.00257,
+            "Марс": 1.524,
+
+            "Юпитер": 5.20,
+            "Сатурн": 9.58,
+            "Уран": 19.20,
+            "Нептун": 30.05,
+            "Плутон": 39.48,
+
+            "Проксима Центавра": 276000,
+            "Альфа Центавра A": 275900,
+            "Альфа Центавра B": 275900,
+            "Звезда Барнарда": 380000,
+            "Сириус": 550000
+        };
+
+        const fromSelect =
+            document.getElementById("from");
+
+        const toSelect =
+            document.getElementById("to");
+
+        for (const name in CELESTIAL_OBJECTS) {
+
+            fromSelect.add(
+                new Option(name, name)
+            );
+
+            toSelect.add(
+                new Option(name, name)
+            );
+
+        }
+
+        toSelect.selectedIndex = 2;
+
+        /*
+        =================================================
+        Формат времени
+        =================================================
+        */
+
+        function formatDuration(seconds) {
+
+            seconds = Math.round(seconds);
+
+            const year =
+                Math.floor(seconds / 31557600);
+
+            seconds %= 31557600;
+
+            const day =
+                Math.floor(seconds / 86400);
+
+            seconds %= 86400;
+
+            const hour =
+                Math.floor(seconds / 3600);
+
+            seconds %= 3600;
+
+            const minute =
+                Math.floor(seconds / 60);
+
+            seconds %= 60;
+
+            if (year) {
+                return `${year} г. ${day} сут.`;
+            }
+
+            if (day) {
+                return `${day} сут. ${hour} ч.`;
+            }
+
+            if (hour) {
+                return `${hour} ч. ${minute} мин.`;
+            }
+
+            if (minute) {
+                return `${minute} мин. ${seconds} сек.`;
+            }
+
+            return `${seconds} сек.`;
+        }
+
+        /*
+        =================================================
+        Расстояние
+        =================================================
+        */
+
+        function getDistanceKm() {
+
+            const custom =
+                Number(
+                    document
+                        .getElementById("customDistance")
+                        .value
+                );
+
+            if (custom > 0) {
+
+                if (
+                    document
+                        .getElementById("lightYears")
+                        .checked
+                ) {
+                    return custom * LIGHT_YEAR_KM;
+                }
+
+                return custom;
+            }
+
+            const from =
+                CELESTIAL_OBJECTS[
+                fromSelect.value
+                ];
+
+            const to =
+                CELESTIAL_OBJECTS[
+                toSelect.value
+                ];
+
+            return Math.abs(from - to) * AU_KM;
+        }
+
+        /*
+        =================================================
+        Релятивистический расчёт
+        =================================================
+        */
+        /*
+        =================================================
+        Релятивистический полёт
+        =================================================
+        */
+
+        function calculateRelativisticFlight(
+            distanceKm,
+            speedPercent
+        ) {
+
+            const distance =
+                distanceKm * 1000;
+
+            const acceleration =
+                Number(
+                    document
+                        .getElementById("gForce")
+                        .value
+                ) * G;
+
+            const speedLimit =
+                (speedPercent / 100) * C;
+
+            const accelTime =
+                speedLimit / acceleration;
+
+            const accelDistance =
+                0.5 *
+                acceleration *
+                accelTime *
+                accelTime;
+
+            let observerTime;
+            let shipTime;
+            let maxSpeed;
+            let mode;
+
+            if (
+                accelDistance * 2 >=
+                distance
+            ) {
+
+                const halfDistance =
+                    distance / 2;
+
+                const actualAccelTime =
+                    Math.sqrt(
+                        (2 * halfDistance)
+                        /
+                        acceleration
+                    );
+
+                maxSpeed =
+                    actualAccelTime *
+                    acceleration;
+
+                observerTime =
+                    actualAccelTime * 2;
+
+                const beta =
+                    maxSpeed / C;
+
+                const gamma =
+                    lorentzFactor(beta);
+
+                shipTime =
+                    observerTime /
+                    gamma;
+
+                mode =
+                    "Разгон → Торможение";
+
+            }
+            else {
+
+                const cruiseDistance =
+                    distance -
+                    accelDistance * 2;
+
+                const cruiseTime =
+                    cruiseDistance /
+                    speedLimit;
+
+                observerTime =
+                    accelTime * 2 +
+                    cruiseTime;
+
+                const beta =
+                    speedLimit / C;
+
+                const gamma =
+                    lorentzFactor(beta);
+
+                shipTime =
+                    observerTime /
+                    gamma;
+
+                maxSpeed =
+                    speedLimit;
+
+                mode =
+                    "Разгон → Насыщение → Торможение";
+
+            }
+
+            return {
+
+                observerTime,
+
+                shipTime,
+
+                maxSpeedPercent:
+                    (maxSpeed / C) * 100,
+
+                mode,
+
+                distance,
+
+                speedLimit
+
+            };
+
+        }
+
+        /*
+        =================================================
+        Волшебный режим
+        =================================================
+        */
+        function calculateMagicFlight(
+            distanceKm,
+            speedPercent
+        ) {
+
+            const distance =
+                distanceKm * 1000;
+
+            const velocity =
+                (speedPercent / 100)
+                *
+                C;
+
+            const time =
+                distance /
+                velocity;
+
+            return {
+
+                observerTime:
+                    time,
+
+                shipTime:
+                    time,
+
+                maxSpeedPercent:
+                    speedPercent,
+
+                mode:
+                    "Волшебный режим",
+
+                distance,
+
+                speedLimit:
+                    velocity
+
+            };
+
+        }
+
+        /*
+        =================================================
+        Canvas графики
+        =================================================
+        */
+
+        function drawVelocityGraph(
+            flight
+        ) {
+
+            const canvas =
+                document
+                    .getElementById(
+                        "velocityCanvas"
+                    );
+
+            if (!canvas) {
+                return;
+            }
+
+            const ctx =
+                canvas.getContext("2d");
+
+            ctx.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            ctx.strokeStyle =
+                "#00FFFF";
+
+            ctx.lineWidth = 3;
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                50,
+                250
+            );
+
+            if (
+                flight.mode.includes(
+                    "Насыщение"
+                )
+            ) {
+
+                ctx.lineTo(
+                    250,
+                    60
+                );
+
+                ctx.lineTo(
+                    750,
+                    60
+                );
+
+                ctx.lineTo(
+                    950,
+                    250
+                );
+
+            }
+            else {
+
+                ctx.lineTo(
+                    500,
+                    60
+                );
+
+                ctx.lineTo(
+                    950,
+                    250
+                );
+
+            }
+
+            ctx.stroke();
+
+            ctx.strokeStyle =
+                "#FFD700";
+
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                50,
+                20
+            );
+
+            ctx.lineTo(
+                950,
+                20
+            );
+
+            ctx.stroke();
+
+        }
+
+        function drawDistanceGraph(
+            flight
+        ) {
+
+            const canvas =
+                document
+                    .getElementById(
+                        "distanceCanvas"
+                    );
+
+            if (!canvas) {
+                return;
+            }
+
+            const ctx =
+                canvas.getContext("2d");
+
+            ctx.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            ctx.strokeStyle =
+                "#00FF88";
+
+            ctx.lineWidth = 3;
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                50,
+                250
+            );
+
+            ctx.quadraticCurveTo(
+                500,
+                120,
+                950,
+                40
+            );
+
+            ctx.stroke();
+
+        }
+        /*
+        =================================================
+        Озвучка
+        =================================================
+        */
+
+        function speakResult(text) {
+
+            if (!("speechSynthesis" in window)) {
+                return;
+            }
+
+            speechSynthesis.cancel();
+
+            const utter =
+                new SpeechSynthesisUtterance(
+                    text
+                );
+
+            utter.lang = "ru-RU";
+
+            speechSynthesis.speak(
+                utter
+            );
+
+        }
+
+        /*
+        =================================================
+        Безумный режим
+        =================================================
+        */
+
+        function triggerMadnessMode() {
+
+            madnessMode = true;
+
+            clearTimeout(
+                madnessTimer
+            );
+
+            madnessTimer =
+                setTimeout(() => {
+
+                    madnessMode = false;
+
+                    document
+                        .getElementById(
+                            "speedLimit"
+                        )
+                        .value = 10;
+
+                    updateResult();
+
+                }, 30000);
+
+        }
+
+        /*
+        =================================================
+        Starfield
+        =================================================
+        */
+
+        const stars = [];
+
+        function createStar() {
+
+            return {
+
+                x:
+                    (Math.random() - 0.5) * 2,
+
+                y:
+                    (Math.random() - 0.5) * 2,
+
+                z:
+                    Math.random() * 0.9 + 0.1
+
+            };
+
+        }
+
+        function initStars() {
+
+            for (
+                let i = 0;
+                i < 700;
+                i++
+            ) {
+
+                stars.push(
+                    createStar()
+                );
+
+            }
+
+        }
+
+        function drawStarfield() {
+
+            const canvas =
+                document.getElementById(
+                    "starfield"
+                );
+
+            const ctx =
+                canvas.getContext("2d");
+
+            canvas.width =
+                innerWidth;
+
+            canvas.height =
+                innerHeight;
+
+            const cx =
+                canvas.width / 2;
+
+            const cy =
+                canvas.height / 2;
+
+            ctx.clearRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+            let speedFactor =
+                Number(
+                    document
+                        .getElementById(
+                            "speedLimit"
+                        ).value || 10
+                ) / 10;
+
+            if (madnessMode) {
+
+                speedFactor *= 10;
+
+            }
+
+            for (const star of stars) {
+
+                star.x *=
+                    1 +
+                    0.008 *
+                    star.z *
+                    speedFactor;
+
+                star.y *=
+                    1 +
+                    0.008 *
+                    star.z *
+                    speedFactor;
+
+                const px =
+                    cx +
+                    star.x * cx;
+
+                const py =
+                    cy +
+                    star.y * cy;
+
+                if (
+                    px < 0 ||
+                    px > canvas.width ||
+                    py < 0 ||
+                    py > canvas.height
+                ) {
+
+                    Object.assign(
+                        star,
+                        createStar()
+                    );
+
+                    continue;
+                }
+
+                if (madnessMode) {
+
+                    ctx.fillStyle =
+                        `hsl(${Math.random() * 360
+                        },100%,60%)`;
+
+                }
+                else {
+
+                    ctx.fillStyle =
+                        "#ccffff";
+
+                }
+
+                const size =
+                    1 +
+                    star.z * 4;
+
+                ctx.fillRect(
+                    px,
+                    py,
+                    size,
+                    size
+                );
+
+            }
+
+            requestAnimationFrame(
+                drawStarfield
+            );
+
+        }
+
+        /*
+        =================================================
+        Обновление результата
+        =================================================
+        */
+
+        function updateResult() {
+
+            const result =
+                document.getElementById(
+                    "result"
+                );
+
+            if (
+                !document
+                    .getElementById(
+                        "customDistance"
+                    ).value
+                &&
+                fromSelect.value ===
+                toSelect.value
+            ) {
+                result.innerHTML =
+                    "Пункт отправления и назначения совпадают.";
+                return;
+            }
+
+            const distanceKm =
+                getDistanceKm();
+
+            const speed =
+                Number(
+                    document
+                        .getElementById(
+                            "speedLimit"
+                        ).value
+                );
+            if (speed > 100) {
+
+                if (!madnessMode) {
+
+                    speakResult(
+                        "Космос поломал!"
+                    );
+
+                }
+
+                triggerMadnessMode();
+
+            }
+            let data;
+
+            if (speed <= 100) {
+
+                data =
+                    calculateRelativisticFlight(
+                        distanceKm,
+                        speed
+                    );
+
+            } else {
+
+                data =
+                    calculateMagicFlight(
+                        distanceKm,
+                        speed
+                    );
+
+            }
+
+            const saving =
+                data.observerTime
+                -
+                data.shipTime;
+
+            const percent =
+                (
+                    saving /
+                    data.observerTime
+                ) * 100;
+
+            result.innerHTML = `
+
+<b>Расстояние:</b>
+${distanceKm.toLocaleString("ru-RU")} км
+<br>
+
+<b>Лимит скорости:</b>
+${speed}% c
+<br>
+
+<b>Максимальная достигнутая скорость:</b>
+${data.maxSpeedPercent.toFixed(2)}% c
+<br>
+
+<b>Время наблюдателя:</b>
+${formatDuration(data.observerTime)}
+<br>
+
+<b>Время на корабле:</b>
+${formatDuration(data.shipTime)}
+<br>
+
+<b>Экономия времени:</b>
+${formatDuration(
+                Math.max(
+                    0,
+                    saving
+                )
+            )}
+<br>
+
+<b>Экономия (%):</b>
+${percent.toFixed(2)}%
+<br>
+
+<b>Режим:</b>
+${data.mode}
+
+`;
+
+            drawVelocityGraph(
+                data
+            );
+
+            drawDistanceGraph(
+                data
+            );
+
+            clearTimeout(
+                speechTimer
+            );
+
+            speechTimer =
+                setTimeout(() => {
+
+                    if (speed > 100) {
+                        return;
+                    }
+
+                    const text =
+                        `Полёт ${fromSelect.value}
+        ${toSelect.value}
+        займёт
+        ${formatDuration(
+                            data.shipTime
+                        )}
+        времени на корабле.
+        На Земле пройдёт
+        ${formatDuration(
+                            data.observerTime
+                        )}`;
+
+                    speakResult(text);
+
+                }, 2000);
+        }
+
+        document.addEventListener(
+            "input",
+            updateResult
+        );
+
+        updateResult();
+        initStars();
+        drawStarfield();
+    </script>
+
+</body>
+
+</html>
