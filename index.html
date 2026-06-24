@@ -278,43 +278,286 @@
 
             seconds = Math.round(seconds);
 
-            const year =
-                Math.floor(seconds / 31557600);
-
+            const year = Math.floor(seconds / 31557600);
             seconds %= 31557600;
 
-            const day =
-                Math.floor(seconds / 86400);
-
+            const day = Math.floor(seconds / 86400);
             seconds %= 86400;
 
-            const hour =
-                Math.floor(seconds / 3600);
-
+            const hour = Math.floor(seconds / 3600);
             seconds %= 3600;
 
-            const minute =
-                Math.floor(seconds / 60);
-
+            const minute = Math.floor(seconds / 60);
             seconds %= 60;
 
             if (year) {
-                return `${year} г. ${day} сут.`;
+                return `${year} ${pluralYears(year)} ${day} суток`;
             }
 
             if (day) {
-                return `${day} сут. ${hour} ч.`;
+                return `${day} суток ${hour} часов`;
             }
 
             if (hour) {
-                return `${hour} ч. ${minute} мин.`;
+                return `${hour} часов ${minute} минут`;
             }
 
             if (minute) {
-                return `${minute} мин. ${seconds} сек.`;
+                return `${minute} минут ${seconds} секунд`;
             }
 
-            return `${seconds} сек.`;
+            return `${seconds} секунд`;
+        }
+
+
+        function formatAxisTime(seconds) {
+
+            if (seconds >= 31557600) {
+
+                return (
+                    seconds /
+                    31557600
+                ).toFixed(1)
+                    + " г";
+
+            }
+
+            if (seconds >= 86400) {
+
+                return (
+                    seconds /
+                    86400
+                ).toFixed(1)
+                    + " сут";
+
+            }
+
+            if (seconds >= 3600) {
+
+                return (
+                    seconds /
+                    3600
+                ).toFixed(1)
+                    + " ч";
+
+            }
+
+            if (seconds >= 60) {
+
+                return (
+                    seconds /
+                    60
+                ).toFixed(1)
+                    + " мин";
+
+            }
+
+            return Math.round(seconds)
+                + " сек";
+
+        }
+
+        function getNiceTimeStep(maxTime) {
+
+            const candidates = [
+
+                1,
+                2,
+                5,
+
+                10,
+                20,
+                50,
+
+                60,
+                120,
+                300,
+                600,
+                1800,
+
+                3600,
+                7200,
+                14400,
+                21600,
+
+                43200,
+                86400,
+
+                172800,
+                432000,
+
+                864000,
+
+                2592000,
+
+                31557600,
+
+                2 * 31557600,
+                5 * 31557600,
+
+                10 * 31557600,
+
+                20 * 31557600,
+
+                50 * 31557600
+
+            ];
+
+            const targetTicks = 6;
+
+            const desired =
+                maxTime /
+                targetTicks;
+
+            for (const step of candidates) {
+
+                if (step >= desired) {
+
+                    return step;
+
+                }
+
+            }
+
+            return candidates[
+                candidates.length - 1
+            ];
+
+        }
+
+        function drawTimeAxis(
+            ctx,
+            left,
+            top,
+            graphWidth,
+            graphHeight,
+            totalTime
+        ) {
+
+            const step =
+                getNiceTimeStep(
+                    totalTime
+                );
+
+            const maxAxisTime =
+                Math.ceil(
+                    totalTime /
+                    step
+                ) * step;
+
+            const tickCount =
+                Math.floor(
+                    maxAxisTime /
+                    step
+                );
+
+            for (
+                let i = 0;
+                i <= tickCount;
+                i++
+            ) {
+
+                const time =
+                    i * step;
+
+                const x =
+                    left +
+                    (
+                        time /
+                        maxAxisTime
+                    )
+                    *
+                    graphWidth;
+
+                ctx.strokeStyle =
+                    "rgba(255,255,255,0.12)";
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    x,
+                    top
+                );
+
+                ctx.lineTo(
+                    x,
+                    top + graphHeight
+                );
+
+                ctx.stroke();
+
+                ctx.fillStyle =
+                    "#cccccc";
+
+                ctx.fillText(
+                    formatAxisTime(
+                        time
+                    ),
+                    x - 15,
+                    top + graphHeight + 20
+                );
+
+            }
+
+            return maxAxisTime;
+
+        }
+
+
+        function formatDistanceLabel(km) {
+
+            if (km >= 1e12) {
+
+                return (
+                    km /
+                    9.4607e12
+                ).toFixed(2)
+                    + " св.г.";
+
+            }
+
+            if (km >= 1e9) {
+
+                return (
+                    km / 1e9
+                ).toFixed(1)
+                    + " млрд км";
+
+            }
+
+            if (km >= 1e6) {
+
+                return (
+                    km / 1e6
+                ).toFixed(1)
+                    + " млн км";
+
+            }
+
+            return Math.round(km)
+                + " км";
+
+        }
+
+
+        function pluralYears(value) {
+
+            const n = Math.abs(value) % 100;
+            const n1 = n % 10;
+
+            if (n > 10 && n < 20) {
+                return "лет";
+            }
+
+            if (n1 > 1 && n1 < 5) {
+                return "года";
+            }
+
+            if (n1 === 1) {
+                return "год";
+            }
+
+            return "лет";
         }
 
         /*
@@ -368,7 +611,6 @@
         Релятивистический полёт
         =================================================
         */
-
         function calculateRelativisticFlight(
             distanceKm,
             speedPercent
@@ -387,14 +629,75 @@
             const speedLimit =
                 (speedPercent / 100) * C;
 
-            const accelTime =
-                speedLimit / acceleration;
+            /*
+            ============================================
+            Вспомогательные функции
+            ============================================
+            */
+
+            const atanh = x =>
+                0.5 *
+                Math.log(
+                    (1 + x) /
+                    (1 - x)
+                );
+
+            const acosh = x =>
+                Math.log(
+                    x +
+                    Math.sqrt(
+                        x * x - 1
+                    )
+                );
+
+            /*
+            ============================================
+            Разгон до заданной скорости
+            при постоянном собственном ускорении
+            ============================================
+            */
+
+            const betaLimit =
+                Math.min(
+                    speedLimit / C,
+                    0.999999999
+                );
+
+            const rapidity =
+                atanh(betaLimit);
+
+            /*
+            Собственное время экипажа
+            */
+
+            const accelShipTime =
+                (C / acceleration) *
+                rapidity;
+
+            /*
+            Время внешнего наблюдателя
+            */
+
+            const accelObserverTime =
+                (C / acceleration) *
+                Math.sinh(rapidity);
+
+            /*
+            Пройденное расстояние
+            за разгон
+            */
 
             const accelDistance =
-                0.5 *
-                acceleration *
-                accelTime *
-                accelTime;
+                (C * C / acceleration) *
+                (
+                    Math.cosh(rapidity) - 1
+                );
+
+            /*
+            ============================================
+            Проверяем достижимость лимита
+            ============================================
+            */
 
             let observerTime;
             let shipTime;
@@ -406,32 +709,46 @@
                 distance
             ) {
 
+                /*
+                ========================================
+                Лимит скорости НЕ достигнут
+                ========================================
+                */
+
                 const halfDistance =
                     distance / 2;
 
-                const actualAccelTime =
-                    Math.sqrt(
-                        (2 * halfDistance)
-                        /
-                        acceleration
+                const eta =
+                    acosh(
+                        1 +
+                        (
+                            acceleration *
+                            halfDistance
+                        ) /
+                        (
+                            C * C
+                        )
                     );
 
-                maxSpeed =
-                    actualAccelTime *
-                    acceleration;
+                const halfShipTime =
+                    (C / acceleration) *
+                    eta;
+
+                const halfObserverTime =
+                    (C / acceleration) *
+                    Math.sinh(eta);
 
                 observerTime =
-                    actualAccelTime * 2;
-
-                const beta =
-                    maxSpeed / C;
-
-                const gamma =
-                    lorentzFactor(beta);
+                    2 *
+                    halfObserverTime;
 
                 shipTime =
-                    observerTime /
-                    gamma;
+                    2 *
+                    halfShipTime;
+
+                maxSpeed =
+                    C *
+                    Math.tanh(eta);
 
                 mode =
                     "Разгон → Торможение";
@@ -439,27 +756,36 @@
             }
             else {
 
+                /*
+                ========================================
+                Разгон → Насыщение → Торможение
+                ========================================
+                */
+
                 const cruiseDistance =
                     distance -
                     accelDistance * 2;
 
-                const cruiseTime =
+                const cruiseObserverTime =
                     cruiseDistance /
                     speedLimit;
 
-                observerTime =
-                    accelTime * 2 +
-                    cruiseTime;
-
-                const beta =
-                    speedLimit / C;
-
                 const gamma =
-                    lorentzFactor(beta);
+                    Math.cosh(
+                        rapidity
+                    );
+
+                const cruiseShipTime =
+                    cruiseObserverTime /
+                    gamma;
+
+                observerTime =
+                    accelObserverTime * 2 +
+                    cruiseObserverTime;
 
                 shipTime =
-                    observerTime /
-                    gamma;
+                    accelShipTime * 2 +
+                    cruiseShipTime;
 
                 maxSpeed =
                     speedLimit;
@@ -468,6 +794,16 @@
                     "Разгон → Насыщение → Торможение";
 
             }
+
+            const gammaMax =
+                1 /
+                Math.sqrt(
+                    1 -
+                    Math.pow(
+                        maxSpeed / C,
+                        2
+                    )
+                );
 
             return {
 
@@ -478,11 +814,16 @@
                 maxSpeedPercent:
                     (maxSpeed / C) * 100,
 
+                gamma:
+                    gammaMax,
+
                 mode,
 
                 distance,
 
-                speedLimit
+                speedLimit,
+
+                acceleration
 
             };
 
@@ -532,6 +873,196 @@
             };
 
         }
+        function buildFlightProfile(flight) {
+
+            const points = [];
+
+            const totalTime =
+                flight.observerTime;
+
+            const maxSpeed =
+                flight.maxSpeedPercent;
+
+            const count = 120;
+
+            for (let i = 0; i <= count; i++) {
+
+                const p = i / count;
+
+                let speed;
+
+                if (
+                    flight.mode.includes(
+                        "Насыщение"
+                    )
+                ) {
+
+                    if (p < 0.25) {
+
+                        speed =
+                            maxSpeed *
+                            (p / 0.25);
+
+                    }
+                    else if (p < 0.75) {
+
+                        speed =
+                            maxSpeed;
+
+                    }
+                    else {
+
+                        speed =
+                            maxSpeed *
+                            (
+                                (1 - p)
+                                /
+                                0.25
+                            );
+
+                    }
+
+                }
+                else {
+
+                    if (p < 0.5) {
+
+                        speed =
+                            maxSpeed *
+                            (p / 0.5);
+
+                    }
+                    else {
+
+                        speed =
+                            maxSpeed *
+                            (
+                                (1 - p)
+                                /
+                                0.5
+                            );
+
+                    }
+
+                }
+
+                points.push({
+
+                    time:
+                        totalTime * p,
+
+                    speed
+
+                });
+
+            }
+
+            return points;
+
+        }
+
+        function buildDistanceProfile(flight) {
+
+            const points = [];
+
+            const totalDistance =
+                flight.distance / 1000;
+
+            const count = 200;
+
+            for (let i = 0; i <= count; i++) {
+
+                const p = i / count;
+
+                let distance;
+
+                if (
+                    flight.mode.includes(
+                        "Насыщение"
+                    )
+                ) {
+
+                    if (p < 0.25) {
+
+                        distance =
+                            totalDistance *
+                            (
+                                2 * p * p
+                            );
+
+                    }
+                    else if (p < 0.75) {
+
+                        distance =
+                            totalDistance *
+                            (
+                                0.125 +
+                                (p - 0.25) *
+                                1.5
+                            );
+
+                    }
+                    else {
+
+                        const q =
+                            (p - 0.75) / 0.25;
+
+                        distance =
+                            totalDistance *
+                            (
+                                0.875 +
+                                0.125 *
+                                (
+                                    2 * q - q * q
+                                )
+                            );
+
+                    }
+
+                } else {
+
+                    if (p < 0.5) {
+
+                        distance =
+                            totalDistance *
+                            (
+                                2 * p * p
+                            );
+
+                    } else {
+
+                        const q =
+                            (p - 0.5) / 0.5;
+
+                        distance =
+                            totalDistance *
+                            (
+                                0.5 +
+                                (
+                                    q -
+                                    q * q / 2
+                                )
+                            );
+
+                    }
+
+                }
+
+                points.push({
+
+                    time:
+                        flight.observerTime * p,
+
+                    distance
+
+                });
+
+            }
+
+            return points;
+
+        }
+
 
         /*
         =================================================
@@ -539,15 +1070,13 @@
         =================================================
         */
 
-        function drawVelocityGraph(
-            flight
-        ) {
+
+        function drawVelocityGraph(flight) {
 
             const canvas =
-                document
-                    .getElementById(
-                        "velocityCanvas"
-                    );
+                document.getElementById(
+                    "velocityCanvas"
+                );
 
             if (!canvas) {
                 return;
@@ -562,6 +1091,167 @@
                 canvas.width,
                 canvas.height
             );
+
+            const profile =
+                buildFlightProfile(
+                    flight
+                );
+
+            if (!profile.length) {
+                return;
+            }
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            const left = 80;
+            const right = 30;
+            const top = 30;
+            const bottom = 50;
+
+            const graphWidth =
+                w - left - right;
+
+            const graphHeight =
+                h - top - bottom;
+
+            ctx.font = "14px Arial";
+
+            /*
+            ============================================
+            Максимальная скорость графика
+            ============================================
+            */
+
+            const maxSpeed =
+                Math.max(
+                    ...profile.map(
+                        p => p.speed
+                    )
+                );
+
+            /*
+            ============================================
+            Оси
+            ============================================
+            */
+
+            ctx.strokeStyle = "#888";
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+
+            ctx.moveTo(left, top);
+            ctx.lineTo(left, h - bottom);
+
+            ctx.lineTo(
+                w - right,
+                h - bottom
+            );
+
+            ctx.stroke();
+
+            /*
+            ============================================
+            Подписи осей
+            ============================================
+            */
+
+            ctx.fillStyle = "#ffffff";
+
+            ctx.fillText(
+                "Скорость (% c)",
+                10,
+                20
+            );
+
+            ctx.fillText(
+                "Время",
+                w - 60,
+                h - 10
+            );
+            /*
+            ============================================
+            Шкала времени X
+            ============================================
+            */
+
+            const axisTime =
+                drawTimeAxis(
+                    ctx,
+                    left,
+                    top,
+                    graphWidth,
+                    graphHeight,
+                    flight.observerTime
+                );
+
+            /*
+            ============================================
+            Логарифмическая шкала Y
+            ============================================
+            */
+
+            const ticks = 5;
+
+            for (let i = 0; i <= ticks; i++) {
+
+                const ratio =
+                    i / ticks;
+
+                const value =
+                    maxSpeed *
+                    Math.pow(
+                        ratio,
+                        2
+                    );
+
+                const y =
+                    h - bottom -
+                    ratio *
+                    graphHeight;
+
+                ctx.strokeStyle =
+                    "rgba(255,255,255,0.15)";
+
+                ctx.beginPath();
+
+                ctx.moveTo(left, y);
+
+                ctx.lineTo(
+                    w - right,
+                    y
+                );
+
+                ctx.stroke();
+
+                ctx.fillStyle =
+                    "#cccccc";
+
+                ctx.fillText(
+                    value.toFixed(2),
+                    10,
+                    y + 5
+                );
+
+            }
+
+
+
+            ctx.fillStyle = "#00FFFF";
+
+            ctx.fillText(
+                `Макс: ${maxSpeed.toFixed(2)}% c`,
+                w - 180,
+                20
+            );
+
+
+            /*
+            ============================================
+            График скорости
+            ============================================
+            */
 
             ctx.strokeStyle =
                 "#00FFFF";
@@ -570,79 +1260,71 @@
 
             ctx.beginPath();
 
-            ctx.moveTo(
-                50,
-                250
-            );
+            profile.forEach((p, index) => {
 
-            if (
-                flight.mode.includes(
-                    "Насыщение"
-                )
-            ) {
+                const x =
+                    left +
+                    (
+                        p.time /
+                        axisTime
+                    )
+                    *
+                    graphWidth;
 
-                ctx.lineTo(
-                    250,
-                    60
-                );
+                const y =
+                    h - bottom -
+                    (
+                        Math.log10(
+                            p.speed + 1
+                        )
+                        /
+                        Math.log10(
+                            maxSpeed + 1
+                        )
+                    )
+                    *
+                    graphHeight;
 
-                ctx.lineTo(
-                    750,
-                    60
-                );
+                if (index === 0) {
 
-                ctx.lineTo(
-                    950,
-                    250
-                );
+                    ctx.moveTo(x, y);
 
-            }
-            else {
+                } else {
 
-                ctx.lineTo(
-                    500,
-                    60
-                );
+                    ctx.lineTo(x, y);
 
-                ctx.lineTo(
-                    950,
-                    250
-                );
+                }
 
-            }
+            });
 
             ctx.stroke();
 
-            ctx.strokeStyle =
-                "#FFD700";
+            /*
+            ============================================
+            Подпись максимальной скорости
+            ============================================
+            */
 
-            ctx.lineWidth = 1;
+            ctx.fillStyle =
+                "#00FFFF";
 
-            ctx.beginPath();
-
-            ctx.moveTo(
-                50,
+            ctx.fillText(
+                `Макс: ${maxSpeed.toFixed(2)}% c`,
+                w - 180,
                 20
             );
-
-            ctx.lineTo(
-                950,
-                20
-            );
-
-            ctx.stroke();
 
         }
 
-        function drawDistanceGraph(
-            flight
-        ) {
+
+
+
+        function drawDistanceGraph(flight) {
 
             const canvas =
-                document
-                    .getElementById(
-                        "distanceCanvas"
-                    );
+                document.getElementById(
+                    "distanceCanvas"
+                );
 
             if (!canvas) {
                 return;
@@ -658,6 +1340,145 @@
                 canvas.height
             );
 
+            const profile =
+                buildDistanceProfile(
+                    flight
+                );
+
+            const w =
+                canvas.width;
+
+            const h =
+                canvas.height;
+
+            const left = 80;
+            const right = 30;
+            const top = 30;
+            const bottom = 50;
+
+            const graphWidth =
+                w - left - right;
+
+            const graphHeight =
+                h - top - bottom;
+
+            ctx.font =
+                "14px Arial";
+
+            const maxDistance =
+                Math.max(
+                    ...profile.map(
+                        p => p.distance
+                    )
+                );
+
+            /*
+            ==========================
+            Оси
+            ==========================
+            */
+
+            ctx.strokeStyle = "#888";
+
+            ctx.beginPath();
+
+            ctx.moveTo(left, top);
+
+            ctx.lineTo(
+                left,
+                h - bottom
+            );
+
+            ctx.lineTo(
+                w - right,
+                h - bottom
+            );
+
+            ctx.stroke();
+
+            /*
+            ==========================
+            Подписи
+            ==========================
+            */
+
+            ctx.fillStyle = "#fff";
+
+            ctx.fillText(
+                "Расстояние (км)",
+                10,
+                20
+            );
+
+            ctx.fillText(
+                "Время",
+                w - 60,
+                h - 10
+            );
+
+            /*
+            ============================================
+            Шкала времени X
+            ============================================
+            */
+
+            const axisTime =
+                drawTimeAxis(
+                    ctx,
+                    left,
+                    top,
+                    graphWidth,
+                    graphHeight,
+                    flight.observerTime
+                );
+            /*
+            ==========================
+            Сетка
+            ==========================
+            */
+
+            for (let i = 0; i <= 5; i++) {
+
+                const y =
+                    h - bottom -
+                    i / 5 * graphHeight;
+
+                ctx.strokeStyle =
+                    "rgba(255,255,255,0.15)";
+
+                ctx.beginPath();
+
+                ctx.moveTo(left, y);
+
+                ctx.lineTo(
+                    w - right,
+                    y
+                );
+
+                ctx.stroke();
+
+                const value =
+                    maxDistance *
+                    i / 5;
+
+                ctx.fillStyle = "#ccc";
+
+                ctx.fillText(
+                    formatDistanceLabel(
+                        value
+                    ),
+                    10,
+                    y + 5
+                );
+
+            }
+
+            /*
+            ==========================
+            Кривая
+            ==========================
+            */
+
             ctx.strokeStyle =
                 "#00FF88";
 
@@ -665,21 +1486,103 @@
 
             ctx.beginPath();
 
-            ctx.moveTo(
-                50,
-                250
-            );
+            profile.forEach((p, index) => {
 
-            ctx.quadraticCurveTo(
-                500,
-                120,
-                950,
-                40
-            );
+                const x =
+                    left +
+                    (
+                        p.time /
+                        axisTime
+                    ) *
+                    graphWidth;
+
+                const y =
+                    h - bottom -
+                    (
+                        p.distance /
+                        maxDistance
+                    ) *
+                    graphHeight;
+
+                if (index === 0) {
+
+                    ctx.moveTo(x, y);
+
+                } else {
+
+                    ctx.lineTo(x, y);
+
+                }
+
+            });
 
             ctx.stroke();
 
+            /*
+            ==========================
+            Точки событий
+            ==========================
+            */
+
+            const markers =
+                flight.mode.includes(
+                    "Насыщение"
+                )
+                    ?
+                    [0.25, 0.75, 1]
+                    :
+                    [0.5, 1];
+
+            const names =
+                flight.mode.includes(
+                    "Насыщение"
+                )
+                    ?
+                    [
+                        "Конец разгона",
+                        "Начало торможения",
+                        "Прибытие"
+                    ]
+                    :
+                    [
+                        "Пик скорости",
+                        "Прибытие"
+                    ];
+
+            markers.forEach(
+                (m, index) => {
+
+                    const x =
+                        left +
+                        m * graphWidth;
+
+                    ctx.fillStyle =
+                        "#FFD700";
+
+                    ctx.beginPath();
+
+                    ctx.arc(
+                        x,
+                        h - bottom - 5,
+                        4,
+                        0,
+                        Math.PI * 2
+                    );
+
+                    ctx.fill();
+
+                    ctx.fillText(
+                        names[index],
+                        x - 20,
+                        h - bottom + 20
+                    );
+
+                }
+            );
+
         }
+
+
         /*
         =================================================
         Озвучка
@@ -916,6 +1819,13 @@
             ) {
                 result.innerHTML =
                     "Пункт отправления и назначения совпадают.";
+                document.getElementById(
+                    "velocityCanvas"
+                ).style.display = "none";
+
+                document.getElementById(
+                    "distanceCanvas"
+                ).style.display = "none";
                 return;
             }
 
@@ -1012,7 +1922,13 @@ ${percent.toFixed(2)}%
 ${data.mode}
 
 `;
+            document.getElementById(
+                "velocityCanvas"
+            ).style.display = "block";
 
+            document.getElementById(
+                "distanceCanvas"
+            ).style.display = "block";
             drawVelocityGraph(
                 data
             );
@@ -1033,8 +1949,7 @@ ${data.mode}
                     }
 
                     const text =
-                        `Полёт ${fromSelect.value}
-        ${toSelect.value}
+                        `Полёт ${fromSelect.value} — ${toSelect.value}
         займёт
         ${formatDuration(
                             data.shipTime
